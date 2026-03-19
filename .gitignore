@@ -1,0 +1,3 @@
+*.o
+timer_threads
+time_and_interval.txt
