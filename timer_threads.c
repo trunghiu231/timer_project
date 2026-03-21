@@ -164,8 +164,10 @@ static void *thread_logging(void *arg)
     while (running) {
         /* Chờ SAMPLE báo có mẫu mới */
         pthread_mutex_lock(&lock);
-        while (!new_sample && running)
+        while (!new_sample && running){
             pthread_cond_wait(&cond_new_T, &lock);
+        }
+            
 
         if (!running) {
             pthread_mutex_unlock(&lock);
