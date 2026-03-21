@@ -1,7 +1,8 @@
 /*
  * Cần định nghĩa trước khi include để mở khoá POSIX clock API
+ * và GNU extension (pthread_setaffinity_np, CPU_SET, ...)
  */
-#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE
 
 /*
  * timer_threads.c
@@ -23,6 +24,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <signal.h>
+#include <sched.h>      /* SCHED_FIFO, sched_param, pthread_setaffinity_np */
 
 /* ─── Shared state ────────────────────────────────────────────────────── */
 
@@ -61,41 +63,62 @@ static void sleep_ns(long long ns)
 
 /* ═══════════════════════════════════════════════════════════════════════
  * Thread SAMPLE
+ * Cải tiến:
+ *   1. SCHED_FIFO priority 99: thread không bị preempt bởi tiến trình thường
+ *   2. CPU affinity core 1: tránh migration giữa các core, giảm cache miss
+ *   3. Absolute deadline (next_wake): tránh drift tích luỹ
  * ═══════════════════════════════════════════════════════════════════════ */
 static void *thread_sample(void *arg)
 {
     (void)arg;
+
+    /* ── Hướng 1: Đặt real-time scheduling policy SCHED_FIFO ── */
+    struct sched_param sp;
+    sp.sched_priority = 99;  /* mức cao nhất (1–99) */
+    if (pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp) != 0) {
+        perror("[SAMPLE] pthread_setschedparam (cần chạy sudo)");
+    } else {
+        printf("[SAMPLE] SCHED_FIFO priority 99 OK\n");
+    }
+
+    /* ── Hướng 2: Ghim thread vào CPU core 1 (CPU affinity) ── */
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(1, &cpuset);     /* core 1: tránh core 0 hay bận xử lý interrupt */
+    if (pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset) != 0) {
+        perror("[SAMPLE] pthread_setaffinity_np");
+    } else {
+        printf("[SAMPLE] CPU affinity → core 1 OK\n");
+    }
+
     printf("[SAMPLE] Thread started.\n");
 
-    long long next_wake = get_time_ns();  // mốc khởi đầu
+    long long next_wake = get_time_ns();  /* mốc khởi đầu */
 
     while (running) {
-        // 1. Đọc thời gian hiện tại → đây là T
+        /* 1. Đọc thời gian hệ thống */
         long long t = get_time_ns();
 
-        // 2. Cập nhật T và báo LOGGING
+        /* 2. Cập nhật biến T và báo cho LOGGING */
         pthread_mutex_lock(&lock);
-        T_ns = t;
+        T_ns       = t;
         new_sample = 1;
         pthread_cond_signal(&cond_new_T);
         pthread_mutex_unlock(&lock);
 
-        // 3. Đọc chu kỳ hiện tại (sau khi sample để tránh thay đổi giữa chừng)
+        /* 3. Đọc chu kì hiện tại */
         pthread_mutex_lock(&period_lock);
         long long X = period_ns;
         pthread_mutex_unlock(&period_lock);
 
-        // 4. Tính thời điểm thức dậy tiếp theo
+        /* 4. Absolute deadline: cộng dồn X để tránh drift tích luỹ */
         next_wake += X;
 
-        // 5. Ngủ đến next_wake (hoặc ít nhất đến bây giờ)
-        long long now = get_time_ns();
+        /* 5. Ngủ đến next_wake; nếu overrun thì bỏ qua sleep */
+        long long now        = get_time_ns();
         long long sleep_time = next_wake - now;
         if (sleep_time > 0) {
             sleep_ns(sleep_time);
-        } else {
-            // overrun: có thể log warning nếu cần
-            // printf("[SAMPLE] Overrun by %lld ns\n", -sleep_time);
         }
     }
 
@@ -164,10 +187,8 @@ static void *thread_logging(void *arg)
     while (running) {
         /* Chờ SAMPLE báo có mẫu mới */
         pthread_mutex_lock(&lock);
-        while (!new_sample && running){
+        while (!new_sample && running)
             pthread_cond_wait(&cond_new_T, &lock);
-        }
-            
 
         if (!running) {
             pthread_mutex_unlock(&lock);

@@ -26,8 +26,9 @@ gcc -Wall -O2 -std=c11 -o timer_threads timer_threads.c -lpthread -lrt
 
 ## 2. Chạy chương trình (5 phút)
 
-./timer_threads & bash change_freq.sh
-
+cd ~/Documents/timer_project
+sudo ./timer_threads &
+bash change_freq.sh
 
 ## 3. Phân tích kết quả
 

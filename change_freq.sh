@@ -17,5 +17,5 @@ for i in "${!PERIODS[@]}"; do
 done
 
 echo "[SCRIPT] All periods done. Stopping C program..."
-pkill -INT -f timer_threads 2>/dev/null || true
+pkill -INT -f timer_threads || pkill -INT sudo trong change_freq.sh 2>/dev/null || true
 echo "[SCRIPT] Done."
