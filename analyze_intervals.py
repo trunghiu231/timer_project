@@ -1,12 +1,6 @@
 #!/usr/bin/env python3
 """
-analyze_intervals.py
-Đọc file time_and_interval.txt, vẽ đồ thị interval theo từng chu kì X.
-
-Cách dùng:
-    python3 analyze_intervals.py [time_and_interval.txt]
-
-Yêu cầu: pip install matplotlib numpy
+analyze_intervals.py - Full version (fixed + optimized)
 """
 
 import sys
@@ -14,12 +8,11 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
 
 # ─── 1. Đọc dữ liệu ────────────────────────────────────────────────────
 fname = sys.argv[1] if len(sys.argv) > 1 else "time_and_interval.txt"
 
-T_list        = []
+T_list = []
 interval_list = []
 
 with open(fname, "r") as f:
@@ -36,90 +29,164 @@ with open(fname, "r") as f:
         except ValueError:
             continue
 
-T        = np.array(T_list,        dtype=np.int64)
+T = np.array(T_list, dtype=np.int64)
 interval = np.array(interval_list, dtype=np.int64)
 
-# Bỏ sample đầu (interval = 0)
-mask     = interval > 0
-T        = T[mask]
+# Bỏ interval = 0
+mask = interval > 0
+T = T[mask]
 interval = interval[mask]
 
 if len(T) == 0:
-    print("Không có dữ liệu hợp lệ trong file.")
+    print("Không có dữ liệu hợp lệ.")
     sys.exit(1)
 
-# ─── 2. Phân chia theo chu kì X (5 giai đoạn × 1 phút) ────────────────
-T0            = T[0]
-PERIOD_SECS   = 60
-NS_PER_PERIOD = PERIOD_SECS * 1_000_000_000
+# ─── 2. Phân chia theo chu kỳ ──────────────────────────────────────────
+T0 = T[0]
+NS_PER_PERIOD = 60 * 1_000_000_000
 
 PERIOD_LABELS = {
-    0: "X = 1,000,000 ns",
-    1: "X = 100,000 ns",
-    2: "X = 10,000 ns",
-    3: "X = 1,000 ns",
-    4: "X = 100 ns",
+    0: "X = 1,000,000 ns (1 ms)",
+    1: "X = 100,000 ns   (100 µs)",
+    2: "X = 10,000 ns    (10 µs)",
+    3: "X = 1,000 ns     (1 µs)",
+    4: "X = 100 ns       (100 ns)",
 }
+
 EXPECTED_NS = [1_000_000, 100_000, 10_000, 1_000, 100]
-COLORS      = ['steelblue', 'darkorange', 'green', 'red', 'purple']
+COLORS = ['steelblue', 'darkorange', 'green', 'red', 'purple']
 
 phase = ((T - T0) // NS_PER_PERIOD).clip(0, 4)
 
-# ─── 3. Vẽ đồ thị ───────────────────────────────────────────────────────
-fig, axes = plt.subplots(5, 1, figsize=(14, 18))
-fig.suptitle("Interval theo từng chu kì lấy mẫu X\n(Linux Timer Threads Assignment)",
-             fontsize=14, fontweight='bold', y=0.98)
+# ─── 3. Vẽ đồ thị ──────────────────────────────────────────────────────
+fig = plt.figure(figsize=(15, 20))
+gs = fig.add_gridspec(6, 2, height_ratios=[1, 1, 1, 1, 1, 1.2])
 
+axes = [fig.add_subplot(gs[i, 0]) for i in range(5)]
+hist_axes = [fig.add_subplot(gs[i, 1]) for i in range(5)]
+hist_ax_total = fig.add_subplot(gs[5, :])
+
+fig.suptitle(
+    "Phân tích Interval theo từng chu kỳ X\n(Linux Thread Sampling Assignment)",
+    fontsize=16, fontweight='bold', y=0.98
+)
+
+# ─── LOOP CHÍNH ────────────────────────────────────────────────────────
 for p in range(5):
-    ax  = axes[p]
+    ax = axes[p]
+    hax = hist_axes[p]
     idx = phase == p
+
     if not np.any(idx):
-        ax.set_title(f"{PERIOD_LABELS[p]}  — không có dữ liệu")
+        ax.set_title(f"{PERIOD_LABELS[p]} — Không có dữ liệu")
         continue
 
-    # Trục X: thời gian tương đối trong giai đoạn, đơn vị ns
-    t_rel = T[idx] - T[idx][0]
+    iv_full = interval[idx]
+    t_rel_full = T[idx] - T[idx][0]
 
-    # Trục Y: interval giữ nguyên đơn vị ns
-    iv = interval[idx]
+    # ─── Downsample để tránh bị Killed ───────────────────────────────
+    MAX_POINTS = 20000
+    if len(iv_full) > MAX_POINTS:
+        step = len(iv_full) // MAX_POINTS
+        iv = iv_full[::step]
+        t_rel = t_rel_full[::step]
+    else:
+        iv = iv_full
+        t_rel = t_rel_full
 
-    ax.plot(t_rel, iv, color=COLORS[p], linewidth=0.6, alpha=0.8)
+    # ─── Metric (LUÔN dùng full data) ───────────────────────────────
+    mean_iv = np.mean(iv_full)
+    std_iv  = np.std(iv_full, ddof=1)
+    min_iv  = np.min(iv_full)
+    max_iv  = np.max(iv_full)
+    target  = EXPECTED_NS[p]
 
-    # Đường lý thuyết: đúng bằng chu kì X
-    ax.axhline(EXPECTED_NS[p], color='black', linestyle='--',
-               linewidth=1.0, label=f"Lý thuyết = {EXPECTED_NS[p]} ns")
+    # ─── LINE PLOT ──────────────────────────────────────────────────
+    ax.plot(t_rel, iv, color=COLORS[p], linewidth=0.7, alpha=0.85)
 
-    # Đường trung bình thực đo
-    mean_iv = np.mean(iv)
-    std_iv  = np.std(iv)
-    ax.axhline(mean_iv, color='red', linestyle=':', linewidth=1.0,
-               label=f"Mean = {mean_iv:.0f} ns  |  Std = {std_iv:.0f} ns")
+    ax.axhline(target, color='black', linestyle='--', linewidth=1.2,
+               label=f'Target = {target:,} ns')
+
+    ax.axhline(mean_iv, color='red', linestyle=':', linewidth=1.2,
+               label=f'Mean = {mean_iv:,.0f} ns | Std = {std_iv:,.1f} ns')
+
+    ax.axhline(min_iv, color='blue', linestyle='-.', linewidth=1.0,
+               label=f'Min = {min_iv:,.0f} ns')
+
+    ax.axhline(max_iv, color='darkred', linestyle='-.', linewidth=1.0,
+               label=f'Max = {max_iv:,.0f} ns')
 
     ax.set_title(PERIOD_LABELS[p], fontsize=11, fontweight='bold')
     ax.set_xlabel("Thời gian tương đối (ns)")
     ax.set_ylabel("Interval (ns)")
-    ax.legend(fontsize=9)
+    ax.legend(fontsize=9, loc='upper right')
     ax.grid(True, alpha=0.3)
 
-    # Clip trục Y để dễ nhìn (bỏ outlier cực lớn)
-    p95 = np.percentile(iv, 95)
-    ax.set_ylim(0, max(p95 * 2, EXPECTED_NS[p] * 3))
+    p95 = np.percentile(iv_full, 95)
+    ax.set_ylim(0, max(p95 * 2.5, target * 4))
 
-plt.tight_layout(rect=[0, 0, 1, 0.97])
-out_file = "interval_analysis.png"
-plt.savefig(out_file, dpi=150, bbox_inches='tight')
-print(f"[PLOT] Saved → {out_file}")
+    # ─── HISTOGRAM ─────────────────────────────────────────────────
+    hax.hist(iv_full, bins=50, color=COLORS[p], alpha=0.75,
+             edgecolor='black', linewidth=0.5)
 
-# ─── 4. In thống kê ─────────────────────────────────────────────────────
-print("\n" + "─" * 65)
-print(f"{'Giai đoạn':<20} {'N':>7} {'Mean (ns)':>12} {'Std (ns)':>12} {'Max (ns)':>12}")
-print("─" * 65)
+    # Vẽ đường trực quan
+    hax.axvline(target, color='black', linestyle='--', linewidth=1)
+    hax.axvline(mean_iv, color='red', linestyle='--', linewidth=1)
+
+    # Text annotation
+    y_max = hax.get_ylim()[1]
+
+    hax.text(mean_iv, y_max*0.9, f"Mean\n{mean_iv:,.0f}",
+             color='red', ha='center', fontsize=8)
+
+    hax.text(target, y_max*0.75, f"Target\n{target:,}",
+             color='black', ha='center', fontsize=8)
+
+    hax.set_title(f"Histogram - {PERIOD_LABELS[p]}", fontsize=10)
+    hax.set_xlabel("Interval (ns)")
+    hax.set_ylabel("Count")
+    hax.grid(True, alpha=0.3)
+
+    p99 = np.percentile(iv_full, 99)
+    hax.set_xlim(0, max(p99 * 1.5, target * 3))
+
+# ─── Histogram tổng ───────────────────────────────────────────────────
+hist_ax_total.hist(interval, bins=100, alpha=0.7,
+                   color='gray', edgecolor='black')
+
+hist_ax_total.set_title("Histogram tổng hợp tất cả giai đoạn",
+                        fontsize=12, fontweight='bold')
+hist_ax_total.set_xlabel("Interval (ns)")
+hist_ax_total.set_ylabel("Count")
+hist_ax_total.grid(True, alpha=0.3)
+
+# ─── Layout & Save ────────────────────────────────────────────────────
+plt.subplots_adjust(hspace=0.5, wspace=0.3, top=0.95)
+plt.savefig("interval_analysis.png", dpi=120, bbox_inches='tight')
+
+print("[PLOT] Đã lưu → interval_analysis.png")
+
+# ─── 4. In thống kê ───────────────────────────────────────────────────
+print("\n" + "="*110)
+print(f"{'Giai đoạn':<32} {'N':>6} {'Mean':>12} {'Std':>12} {'Min':>12} {'Max':>12} {'Range':>12} {'95th':>12}")
+print("="*110)
+
 for p in range(5):
     idx = phase == p
     if not np.any(idx):
-        print(f"{PERIOD_LABELS[p]:<20} {'N/A':>7}")
+        print(f"{PERIOD_LABELS[p]:<32} {'N/A':>6}")
         continue
+
     iv_ns = interval[idx]
-    print(f"{PERIOD_LABELS[p]:<20} {np.sum(idx):>7} "
-          f"{np.mean(iv_ns):>12.0f} {np.std(iv_ns):>12.0f} {np.max(iv_ns):>12.0f}")
-print("─" * 65)
+    mean_val = np.mean(iv_ns)
+    std_val  = np.std(iv_ns, ddof=1)
+    min_val  = np.min(iv_ns)
+    max_val  = np.max(iv_ns)
+    p95_val  = np.percentile(iv_ns, 95)
+
+    print(f"{PERIOD_LABELS[p]:<32} {len(iv_ns):>6} "
+          f"{mean_val:>12.0f} {std_val:>12.1f} "
+          f"{min_val:>12.0f} {max_val:>12.0f} "
+          f"{(max_val-min_val):>12.0f} {p95_val:>12.0f}")
+
+print("="*110)
