@@ -16,6 +16,15 @@ for i in "${!PERIODS[@]}"; do
     sleep 60
 done
 
+# echo "[SCRIPT] All periods done. Stopping C program..."
+# pkill -INT -f timer_threads || pkill -INT sudo trong change_freq.sh 2>/dev/null || true
+# echo "[SCRIPT] Done."
 echo "[SCRIPT] All periods done. Stopping C program..."
-pkill -INT -f timer_threads || pkill -INT sudo trong change_freq.sh 2>/dev/null || true
+
+# Cách sạch và rõ ràng
+sudo pkill -INT -f timer_threads
+
+# Hoặc an toàn hơn một chút (tránh kill nhầm process khác cùng tên)
+sudo pkill -INT -f "^./timer_threads" 
+
 echo "[SCRIPT] Done."

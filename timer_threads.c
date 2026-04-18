@@ -25,6 +25,7 @@
 #include <stdint.h>
 #include <signal.h>
 #include <sched.h>      /* SCHED_FIFO, sched_param, pthread_setaffinity_np */
+#include <errno.h>
 
 /* ─── Shared state ────────────────────────────────────────────────────── */
 
@@ -60,6 +61,17 @@ static void sleep_ns(long long ns)
     while (clock_nanosleep(CLOCK_MONOTONIC, 0, &req, &req) != 0)
         ;
 }
+/* ─── Helper: sleep chính xác tuyệt đối dùng clock_nanosleep với TIMER_ABSTIME ─── */
+static void sleep_until(struct timespec *ts)
+{
+    while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, ts, NULL) != 0) {
+        if (errno != EINTR) {
+            perror("[SAMPLE] clock_nanosleep failed");
+            break;
+        }
+        /* Nếu bị EINTR (signal), tiếp tục ngủ đến thời điểm tuyệt đối */
+    }
+}
 
 /* ═══════════════════════════════════════════════════════════════════════
  * Thread SAMPLE
@@ -93,8 +105,10 @@ static void *thread_sample(void *arg)
 
     printf("[SAMPLE] Thread started.\n");
 
-    long long next_wake = get_time_ns();  /* mốc khởi đầu */
-
+    /* Khởi tạo next_wake tuyệt đối */
+    struct timespec next_ts;
+    clock_gettime(CLOCK_MONOTONIC, &next_ts);
+    
     while (running) {
         /* 1. Đọc thời gian hệ thống */
         long long t = get_time_ns();
@@ -111,15 +125,15 @@ static void *thread_sample(void *arg)
         long long X = period_ns;
         pthread_mutex_unlock(&period_lock);
 
-        /* 4. Absolute deadline: cộng dồn X để tránh drift tích luỹ */
-        next_wake += X;
-
-        /* 5. Ngủ đến next_wake; nếu overrun thì bỏ qua sleep */
-        long long now        = get_time_ns();
-        long long sleep_time = next_wake - now;
-        if (sleep_time > 0) {
-            sleep_ns(sleep_time);
+        /* 4. Cập nhật deadline tuyệt đối (tránh drift) */
+        next_ts.tv_nsec += X;
+        while (next_ts.tv_nsec >= 1000000000LL) {
+            next_ts.tv_nsec -= 1000000000LL;
+            next_ts.tv_sec++;
         }
+
+        /* 5. Ngủ tuyệt đối đến next_ts */
+        sleep_until(&next_ts);
     }
 
     printf("[SAMPLE] Thread exiting.\n");
