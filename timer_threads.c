@@ -47,12 +47,12 @@ static volatile int running = 1;
 static long long get_time_ns(void)
 {
     struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
+    clock_gettime(CLOCK_MONOTONIC, &ts);
     return (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
 }
 
 /* ─── Helper: sleep chính xác (ns) dùng clock_nanosleep ──────────────── */
-static void sleep_ns(long long ns)
+static void sleep_relative_ns(long long ns)
 {
     struct timespec req;
     req.tv_sec  = ns / 1000000000LL;
@@ -105,7 +105,7 @@ static void *thread_sample(void *arg)
 
     printf("[SAMPLE] Thread started.\n");
 
-    /* Khởi tạo next_wake tuyệt đối */
+    /* Khởi tạo thời điểm tuyệt đối đầu tiên */
     struct timespec next_ts;
     clock_gettime(CLOCK_MONOTONIC, &next_ts);
     
@@ -167,7 +167,7 @@ static void *thread_input(void *arg)
             fclose(fp);
         }
         /* Kiểm tra mỗi 100 ms */
-        sleep_ns(100000000LL);
+        sleep_relative_ns(100000000LL);
     }
 
     printf("[INPUT]  Thread exiting.\n");
