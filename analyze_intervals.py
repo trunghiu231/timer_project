@@ -126,29 +126,32 @@ for p in range(5):
     ax.set_ylim(0, max(p95 * 2.5, target * 4))
 
     # ─── HISTOGRAM ─────────────────────────────────────────────────
-    hax.hist(iv_full, bins=50, color=COLORS[p], alpha=0.75,
+    # Lọc dữ liệu theo range TRƯỚC khi vẽ — tránh set_xlim sau hist()
+    # vì set_xlim sau khi vẽ sẽ khiến matplotlib tính lại ylim dựa trên
+    # dữ liệu bị cắt → cột cao nhất (nằm trong range) bị clip mất ngọn.
+    p99 = np.percentile(iv_full, 99)
+    x_max = max(p99 * 1.5, target * 3)
+    iv_hist = iv_full[iv_full <= x_max]
+
+    hax.hist(iv_hist, bins=50, color=COLORS[p], alpha=0.75,
              edgecolor='black', linewidth=0.5)
 
-    # Vẽ đường trực quan
     hax.axvline(target, color='black', linestyle='--', linewidth=1)
     hax.axvline(mean_iv, color='red', linestyle='--', linewidth=1)
-
-    # Text annotation
-    y_max = hax.get_ylim()[1]
-
-    hax.text(mean_iv, y_max*0.9, f"Mean\n{mean_iv:,.0f}",
-             color='red', ha='center', fontsize=8)
-
-    hax.text(target, y_max*0.75, f"Target\n{target:,}",
-             color='black', ha='center', fontsize=8)
 
     hax.set_title(f"Histogram - {PERIOD_LABELS[p]}", fontsize=10)
     hax.set_xlabel("Interval (ns)")
     hax.set_ylabel("Count")
     hax.grid(True, alpha=0.3)
 
-    p99 = np.percentile(iv_full, 99)
-    hax.set_xlim(0, max(p99 * 1.5, target * 3))
+    # Annotation dùng tọa độ tương đối trên trục Y (0–1)
+    # để không ảnh hưởng đến ylim của histogram.
+    hax.text(mean_iv, 0.92, f"Mean\n{mean_iv:,.0f}",
+             color='red', ha='center', fontsize=8,
+             transform=hax.get_xaxis_transform())
+    hax.text(target, 0.77, f"Target\n{target:,}",
+             color='black', ha='center', fontsize=8,
+             transform=hax.get_xaxis_transform())
 
 # ─── Histogram tổng ───────────────────────────────────────────────────
 hist_ax_total.hist(interval, bins=100, alpha=0.7,
