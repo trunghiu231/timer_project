@@ -59,12 +59,11 @@ COLORS = ['steelblue', 'darkorange', 'green', 'red', 'purple']
 phase = ((T - T0) // NS_PER_PERIOD).clip(0, 4)
 
 # ─── 3. Vẽ đồ thị ──────────────────────────────────────────────────────
-fig = plt.figure(figsize=(15, 20))
-gs = fig.add_gridspec(6, 2, height_ratios=[1, 1, 1, 1, 1, 1.2])
+fig = plt.figure(figsize=(20, 20))
+gs = fig.add_gridspec(5, 2, height_ratios=[1, 1, 1, 1, 1])
 
 axes = [fig.add_subplot(gs[i, 0]) for i in range(5)]
 hist_axes = [fig.add_subplot(gs[i, 1]) for i in range(5)]
-hist_ax_total = fig.add_subplot(gs[5, :])
 
 fig.suptitle(
     "Phân tích Interval theo từng chu kỳ X\n(Linux Thread Sampling Assignment)",
@@ -126,6 +125,23 @@ for p in range(5):
     ax.set_ylim(0, max(p95 * 2.5, target * 4))
 
     # ─── HISTOGRAM ─────────────────────────────────────────────────
+<<<<<<< HEAD
+    # Dùng p0.5–p99.5 để zoom tự động vừa khít dữ liệu mỗi giai đoạn.
+    # Tránh range quá rộng (chỉ 1 cột to) khi dữ liệu tập trung hẹp.
+    p1  = np.percentile(iv_full, 1)
+    p99 = np.percentile(iv_full, 99)
+    spread = p99 - p1
+    if p <= 1:
+        x_min = target * 0.9
+        x_max = target * 1.1
+    else:
+        x_min = p1 - spread * 0.3
+        x_max = p99 + spread * 0.3
+    iv_hist = iv_full[(iv_full >= x_min) & (iv_full <= x_max)]
+
+    hax.hist(iv_hist, bins=80, color=COLORS[p], alpha=0.75,
+             edgecolor='black', linewidth=0.3)
+=======
     # Lọc dữ liệu theo range TRƯỚC khi vẽ — tránh set_xlim sau hist()
     # vì set_xlim sau khi vẽ sẽ khiến matplotlib tính lại ylim dựa trên
     # dữ liệu bị cắt → cột cao nhất (nằm trong range) bị clip mất ngọn.
@@ -135,6 +151,7 @@ for p in range(5):
 
     hax.hist(iv_hist, bins=50, color=COLORS[p], alpha=0.75,
              edgecolor='black', linewidth=0.5)
+>>>>>>> main
 
     hax.axvline(target, color='black', linestyle='--', linewidth=1)
     hax.axvline(mean_iv, color='red', linestyle='--', linewidth=1)
@@ -152,6 +169,8 @@ for p in range(5):
     hax.text(target, 0.77, f"Target\n{target:,}",
              color='black', ha='center', fontsize=8,
              transform=hax.get_xaxis_transform())
+<<<<<<< HEAD
+=======
 
 # ─── Histogram tổng ───────────────────────────────────────────────────
 hist_ax_total.hist(interval, bins=100, alpha=0.7,
@@ -162,6 +181,7 @@ hist_ax_total.set_title("Histogram tổng hợp tất cả giai đoạn",
 hist_ax_total.set_xlabel("Interval (ns)")
 hist_ax_total.set_ylabel("Count")
 hist_ax_total.grid(True, alpha=0.3)
+>>>>>>> main
 
 # ─── Layout & Save ────────────────────────────────────────────────────
 plt.subplots_adjust(hspace=0.5, wspace=0.3, top=0.95)
