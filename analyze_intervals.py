@@ -125,6 +125,7 @@ for p in range(5):
     ax.set_ylim(0, max(p95 * 2.5, target * 4))
 
     # ─── HISTOGRAM ─────────────────────────────────────────────────
+<<<<<<< HEAD
     # Dùng p0.5–p99.5 để zoom tự động vừa khít dữ liệu mỗi giai đoạn.
     # Tránh range quá rộng (chỉ 1 cột to) khi dữ liệu tập trung hẹp.
     p1  = np.percentile(iv_full, 1)
@@ -140,6 +141,17 @@ for p in range(5):
 
     hax.hist(iv_hist, bins=80, color=COLORS[p], alpha=0.75,
              edgecolor='black', linewidth=0.3)
+=======
+    # Lọc dữ liệu theo range TRƯỚC khi vẽ — tránh set_xlim sau hist()
+    # vì set_xlim sau khi vẽ sẽ khiến matplotlib tính lại ylim dựa trên
+    # dữ liệu bị cắt → cột cao nhất (nằm trong range) bị clip mất ngọn.
+    p99 = np.percentile(iv_full, 99)
+    x_max = max(p99 * 1.5, target * 3)
+    iv_hist = iv_full[iv_full <= x_max]
+
+    hax.hist(iv_hist, bins=50, color=COLORS[p], alpha=0.75,
+             edgecolor='black', linewidth=0.5)
+>>>>>>> main
 
     hax.axvline(target, color='black', linestyle='--', linewidth=1)
     hax.axvline(mean_iv, color='red', linestyle='--', linewidth=1)
@@ -157,6 +169,19 @@ for p in range(5):
     hax.text(target, 0.77, f"Target\n{target:,}",
              color='black', ha='center', fontsize=8,
              transform=hax.get_xaxis_transform())
+<<<<<<< HEAD
+=======
+
+# ─── Histogram tổng ───────────────────────────────────────────────────
+hist_ax_total.hist(interval, bins=100, alpha=0.7,
+                   color='gray', edgecolor='black')
+
+hist_ax_total.set_title("Histogram tổng hợp tất cả giai đoạn",
+                        fontsize=12, fontweight='bold')
+hist_ax_total.set_xlabel("Interval (ns)")
+hist_ax_total.set_ylabel("Count")
+hist_ax_total.grid(True, alpha=0.3)
+>>>>>>> main
 
 # ─── Layout & Save ────────────────────────────────────────────────────
 plt.subplots_adjust(hspace=0.5, wspace=0.3, top=0.95)
